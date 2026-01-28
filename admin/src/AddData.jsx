@@ -25,7 +25,7 @@ const AddData = () => {
   const [existingData, setExistingData] = useState([]);
 
   // Base URL for your API
-  const API_BASE = 'http://localhost:5000/api/data';
+  const API_BASE = 'https://trackofin.onrender.com/api/data';
 
   // Fetch data to show current candidates below the form
   const fetchCurrentData = async () => {

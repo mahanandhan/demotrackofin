@@ -33,7 +33,7 @@ const App = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('http://localhost:5000/api/data');
+      const response = await axios.get('https://trackofin.onrender.com/api/data');
       const items = Array.isArray(response.data.data) 
         ? response.data.data 
         : (Array.isArray(response.data) ? response.data : []);
