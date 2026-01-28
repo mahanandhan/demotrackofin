@@ -62,7 +62,7 @@ const App = () => {
     // 1. ALWAYS increment the count in the backend immediately on every click.
     // This ensures if A beats B, A gets +1. If A then beats C, A gets another +1.
     try {
-      await axios.post(`http://localhost:5000/api/data/increment/${winner._id}`);
+      await axios.post(`https://trackofin.onrender.com/api/data/increment/${winner._id}`);
     } catch (err) {
       console.error('Failed to increment match win:', err);
     }
