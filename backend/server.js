@@ -7,7 +7,18 @@ dotenv.config();
 const app = express();
 
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "https://trackofinadmin.vercel.app",
+      "https://trackofin.vercel.app",
+      "https://trackofin.onrender.com",
+      "http://localhost:5174",
+      "http://localhost:5000",
+      "http://localhost:5173",
+    ],
+  })
+);
 const PORT = 5000;
 
 app.get('/', (req, res) => {
