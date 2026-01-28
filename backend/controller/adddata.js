@@ -88,3 +88,14 @@ export const getData = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 }
+
+
+export const deleteAllData = async (req, res) => {
+    try {
+      await AddData.deleteMany({});
+      res.status(200).json({ message: "All data deleted successfully" });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+}

@@ -1,16 +1,34 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Moon, Vote, Loader2, AlertCircle, Trophy, Zap } from 'lucide-react';
+import { Moon, Vote, Loader2, AlertCircle, Trophy, Zap, CheckCircle2, LogOut, RefreshCcw } from 'lucide-react';
 
 const App = () => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Gauntlet State
-  const [currentIndex, setCurrentIndex] = useState(1); // The index of the challenger
-  const [currentChampion, setCurrentChampion] = useState(null); // The winner of the last round
-  const [isFinished, setIsFinished] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(() => {
+    const saved = localStorage.getItem('gauntlet_index');
+    return saved ? parseInt(saved, 10) : 1;
+  });
+  
+  const [currentChampion, setCurrentChampion] = useState(() => {
+    const saved = localStorage.getItem('gauntlet_champion');
+    return saved ? JSON.parse(saved) : null;
+  });
+  
+  const [isFinished, setIsFinished] = useState(() => {
+    const saved = localStorage.getItem('gauntlet_finished');
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('gauntlet_index', currentIndex);
+    localStorage.setItem('gauntlet_finished', isFinished);
+    if (currentChampion) {
+      localStorage.setItem('gauntlet_champion', JSON.stringify(currentChampion));
+    }
+  }, [currentIndex, currentChampion, isFinished]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -24,8 +42,9 @@ const App = () => {
         setError('At least 2 candidates are required for the Gauntlet.');
       } else {
         setData(items);
-        setCurrentChampion(items[0]); // Start with the first person as initial champ
-        setCurrentIndex(1); // First challenger is index 1
+        if (!currentChampion && items.length > 0) {
+          setCurrentChampion(items[0]);
+        }
         setError(null);
       }
     } catch (err) {
@@ -40,27 +59,38 @@ const App = () => {
   }, []);
 
   const handleVote = async (winner) => {
-    // If there are still challengers left in the array
+    // 1. ALWAYS increment the count in the backend immediately on every click.
+    // This ensures if A beats B, A gets +1. If A then beats C, A gets another +1.
+    try {
+      await axios.post(`http://localhost:5000/api/data/increment/${winner._id}`);
+    } catch (err) {
+      console.error('Failed to increment match win:', err);
+    }
+
+    // 2. Update the flow logic
     if (currentIndex < data.length - 1) {
+      // Move to next challenger
       setCurrentChampion(winner);
       setCurrentIndex(prev => prev + 1);
     } else {
-      // Final round finished
+      // End of gauntlet
       setCurrentChampion(winner);
       setIsFinished(true);
-      
-      try {
-        // Increment the final winner's count in the database
-        await axios.post(`http://localhost:5000/api/data/increment/${winner._id}`);
-      } catch (err) {
-        console.error('Failed to sync final winner:', err);
-      }
     }
   };
 
   const resetGauntlet = () => {
+    localStorage.removeItem('gauntlet_index');
+    localStorage.removeItem('gauntlet_champion');
+    localStorage.removeItem('gauntlet_finished');
+    setCurrentIndex(1);
     setIsFinished(false);
-    fetchData();
+    if (data.length > 0) setCurrentChampion(data[0]);
+  };
+
+  const exitApp = () => {
+    localStorage.clear();
+    window.location.reload();
   };
 
   if (loading) {
@@ -68,7 +98,7 @@ const App = () => {
       <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center space-y-4">
         <Loader2 className="text-emerald-500 animate-spin" size={48} />
         <h1 className="text-emerald-500 font-mono text-xl animate-pulse uppercase tracking-widest text-center px-4">
-          Initializing Gauntlet Protocol...
+          Restoring Protocol State...
         </h1>
       </div>
     );
@@ -78,7 +108,6 @@ const App = () => {
     <div className="min-h-screen bg-[#050505] text-emerald-50 font-mono selection:bg-emerald-500 selection:text-black overflow-x-hidden">
       <div className="fixed inset-0 pointer-events-none opacity-20 bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
 
-      {/* Header */}
       <nav className="sticky top-0 z-50 backdrop-blur-xl border-b border-emerald-500/10 bg-black/60">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -117,12 +146,10 @@ const App = () => {
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center relative">
-              {/* Vertical/Horizontal "VS" line */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 bg-black border border-emerald-500/50 w-12 h-12 rounded-full flex items-center justify-center font-black text-emerald-500 italic shadow-[0_0_20px_rgba(16,185,129,0.4)]">
                 VS
               </div>
 
-              {/* Current Champion (The one who won previously) */}
               <FighterCard 
                 label="Current King"
                 candidate={currentChampion} 
@@ -130,7 +157,6 @@ const App = () => {
                 isChamp
               />
 
-              {/* New Challenger */}
               <FighterCard 
                 label="New Challenger"
                 candidate={data[currentIndex]} 
@@ -151,29 +177,36 @@ const App = () => {
           </div>
         )}
 
-        {/* Final Result Stage */}
         {isFinished && (
-          <div className="text-center space-y-8 animate-in zoom-in-95 duration-700">
+          <div className="text-center space-y-12 py-12 animate-in zoom-in-95 duration-700">
             <div className="relative inline-block">
-              <div className="absolute inset-0 bg-emerald-500/30 blur-[120px] rounded-full animate-pulse"></div>
-              <Trophy className="relative text-emerald-400 w-32 h-32 mx-auto drop-shadow-[0_0_40px_rgba(16,185,129,0.6)]" />
+              <div className="absolute inset-0 bg-emerald-500/20 blur-[100px] rounded-full"></div>
+              <CheckCircle2 className="relative text-emerald-500 w-24 h-24 mx-auto" />
             </div>
             
             <div className="space-y-4">
-              <p className="text-emerald-500 font-black tracking-[0.5em] uppercase text-sm">Ultimate Champion</p>
-              <h2 className="text-6xl md:text-8xl font-black text-white uppercase tracking-tighter italic leading-none">
-                {currentChampion?.title}
+              <h2 className="text-4xl md:text-6xl font-black text-white uppercase tracking-tighter">
+                Gauntlet <span className="text-emerald-500">Completed</span>
               </h2>
+              <p className="text-emerald-500/60 font-bold uppercase tracking-[0.2em] max-w-md mx-auto">
+                All match victories have been recorded.
+              </p>
             </div>
 
-            <div className="pt-12">
+            <div className="flex flex-col md:flex-row items-center justify-center gap-6 pt-8">
               <button 
                 onClick={resetGauntlet}
-                className="group flex items-center gap-3 mx-auto px-12 py-5 bg-emerald-500 text-black font-black rounded-2xl hover:bg-white transition-all transform hover:scale-105 active:scale-95 shadow-2xl"
+                className="group w-full md:w-auto flex items-center justify-center gap-3 px-10 py-4 bg-emerald-500 text-black font-black rounded-xl hover:bg-white transition-all transform hover:scale-105 active:scale-95 shadow-xl"
               >
-                RESTART GAUNTLET <Zap size={20} fill="currentColor" />
+                <RefreshCcw size={20} /> RESTART PROTOCOL
               </button>
-              <p className="mt-8 text-emerald-500/30 text-[10px] uppercase font-bold tracking-[0.3em]">Progress Saved to Database • Night ends 🌙</p>
+              
+              <button 
+                onClick={exitApp}
+                className="group w-full md:w-auto flex items-center justify-center gap-3 px-10 py-4 bg-white/5 border border-white/10 text-white font-black rounded-xl hover:bg-red-500 hover:text-black hover:border-red-500 transition-all transform hover:scale-105 active:scale-95"
+              >
+                <LogOut size={20} /> EXIT
+              </button>
             </div>
           </div>
         )}
@@ -188,7 +221,7 @@ const FighterCard = ({ candidate, onClick, label, isChamp = false }) => (
     className={`group relative w-full p-6 md:p-10 rounded-[3rem] border-2 text-center transition-all duration-500 overflow-hidden ${
       isChamp 
         ? 'border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500 shadow-[0_0_30px_rgba(0,0,0,0.5)]' 
-        : 'border-white/10 bg-white/[0.02] hover:border-emerald-500/50'
+        : 'border-white/10 bg-white/2 hover:border-emerald-500/50'
     }`}
   >
     <div className="absolute top-6 left-1/2 -translate-x-1/2">
@@ -198,26 +231,21 @@ const FighterCard = ({ candidate, onClick, label, isChamp = false }) => (
         {label}
       </span>
     </div>
-
     <div className="mt-8 relative inline-block">
-      <div className={`absolute inset-0 rounded-full blur-2xl transition-opacity opacity-0 group-hover:opacity-40 ${isChamp ? 'bg-emerald-400' : 'bg-white'}`}></div>
       <img 
         src={candidate?.photo || 'https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=300&q=80'} 
         alt="" 
         className="relative w-32 h-32 md:w-48 md:h-48 rounded-full object-cover border-4 border-black group-hover:scale-105 transition-transform duration-500" 
       />
     </div>
-
     <div className="mt-6 space-y-2">
-      <h3 className="text-2xl md:text-3xl font-black text-white uppercase group-hover:text-emerald-400 transition-colors truncate">
-        {candidate?.title || 'Unknown Node'}
+      <h3 className="text-2xl md:text-3xl font-black text-white uppercase truncate">
+        {candidate?.title || 'Unknown'}
       </h3>
       <div className="flex items-center justify-center gap-2 text-emerald-500/40 font-bold text-xs uppercase">
         <Vote size={14} /> Tap to select
       </div>
     </div>
-
-    <div className="absolute bottom-0 left-0 w-full h-1 bg-emerald-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-center"></div>
   </button>
 );
 
